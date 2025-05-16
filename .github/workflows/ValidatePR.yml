@@ -63,8 +63,8 @@ jobs:
             fi
           }
 
-          check_repo "$BACKEND_REPO" "$ID_PR" || exit 1
-          # check_repo "$SQL_REPO" "$ID_PR" || exit 1
+          check_repo "$FRONTEND_REPO" "$ID_PR" || exit 1
+          # check_repo "$BACKEND_REPO" "$ID_PR" || exit 1
 
           echo "ready_to_merge=true" >> $GITHUB_OUTPUT
       
@@ -97,8 +97,8 @@ jobs:
             fi
           }
 
-          merge_if_exists "$BACKEND_REPO" "$ID_PR"
-          # merge_if_exists "$SQL_REPO" "$ID_PR"
+          merge_if_exists "$FRONTEND_REPO" "$ID_PR"
+          # merge_if_exists "$BACKEND_REPO" "$ID_PR"
 
       - name: Checkout del repositorio actual
         uses: actions/checkout@v4
