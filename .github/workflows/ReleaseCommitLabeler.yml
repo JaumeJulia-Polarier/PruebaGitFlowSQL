@@ -1,0 +1,53 @@
+name: Release Commit Labeler
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  Prepare_PR:
+    runs-on: ubuntu-latest
+    environment: ${{github.ref_name}}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install GitHub CLI
+        run: sudo apt-get install gh -y
+  
+      - name: Install jq
+        run: sudo apt-get install jq -y
+
+      - name: Create Tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.DEPLOY_GH_TOKEN }}
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+
+          # Obtener fecha
+          DATE=$(date +%Y%m%d)
+          git fetch --tags
+          LATEST_TAG=$(git tag --list "1.$DATE.*" | sort -V | tail -1)
+
+          echo "Fecha: $DATE"
+
+          echo "Latest tag: $LATEST_TAG"
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No previous tag found for today."
+          else
+            echo "Previous tag found: $LATEST_TAG"
+          fi
+
+          if [ -z "$LATEST_TAG" ]; then
+            NEXT_TAG="1.$DATE.0"
+          else
+            LAST_INDEX=$(echo "$LATEST_TAG" | awk -F. '{print $3}')
+            NEXT_INDEX=$((LAST_INDEX + 1))
+            NEXT_TAG="1.$DATE.$NEXT_INDEX"
+          fi
+
+          # Crear tag en el último commit (el merge a main)
+          git tag "$NEXT_TAG"
+          git push origin "$NEXT_TAG"

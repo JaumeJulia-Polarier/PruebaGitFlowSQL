@@ -1,0 +1,22 @@
+name: Validate PR branch name against main
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check-branch-name:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check branch name pattern
+        env:
+          BRANCH_NAME: ${{ github.head_ref }}
+        run: |
+          echo "Checking branch: $BRANCH_NAME"
+          if [[ "$BRANCH_NAME" =~ ^hotfix/.+ ]] || [[ "$BRANCH_NAME" == "stage" ]]; then
+            echo "✅ Branch name is valid"
+          else
+            echo "❌ Branch name '$BRANCH_NAME' is not allowed for PRs to main, make sure it starts with 'hotfix/' or is 'stage'."
+            exit 1
+          fi

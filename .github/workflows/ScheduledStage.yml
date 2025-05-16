@@ -1,0 +1,73 @@
+name: PR a stage
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 7 * * 1-5' # Cada día a la medianoche
+
+jobs:
+  prepare-stage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          ref: develop
+
+      - name: Preventive Unit testing
+        run: |
+          echo "Running preventive unit tests..."
+
+      - name: Install GitHub CLI
+        if: success()
+        run: sudo apt-get install gh -y
+  
+      - name: Install jq
+        run: sudo apt-get install jq -y
+
+      - name: PR to stage
+        id: create_pr # Give this step an ID to reference its output
+        env:
+          GITHUB_TOKEN: ${{ secrets.DEPLOY_GH_TOKEN }}
+        #   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_OUTPUT=$(gh pr create \
+            --title "Automated PR: develop -> stage" \
+            --body "This is an automated PR to stage." \
+            --base stage \
+            --head develop \
+            --label "automated-pr")
+
+          echo "gh pr create output:"
+          echo "$PR_OUTPUT"
+
+          # Extract the PR number from the standard output URL
+          # The output typically includes a line with the PR URL like "https://github.com/owner/repo/pull/123"
+          # We'll use grep to find the line containing the URL and sed to extract the number.
+          # Ensure the grep pattern is robust enough to find the URL line.
+          PR_URL=$(echo "$PR_OUTPUT" | grep -oP 'https://github.com/[^/]+/[^/]+/pull/\d+' | head -1)
+          # recomendacion de copilot: PR_URL=$(echo "$PR_OUTPUT" | grep -Eo 'https://github.com/[^/]+/[^/]+/pull/[0-9]+')
+
+          if [ -z "$PR_URL" ]; then
+            echo "Error: Could not find PR URL in output."
+            # Exit with a non-zero status to fail the step
+            exit 1
+          fi
+
+          # Extract the number from the URL using sed
+          PR_NUMBER=$(echo "$PR_URL" | sed -E 's/.*pull\/([0-9]+).*/\1/')
+          # recomendacion de copilot: PR_NUMBER=$(echo "$PR_URL" | grep -Eo '[0-9]+$')
+
+          echo "Created PR #$PR_NUMBER"
+          # Set the PR number as a step output variable for the next step
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+    
+      - name: Merge PR
+        env:
+            GITHUB_TOKEN: ${{ secrets.DEPLOY_GH_TOKEN }}
+            PR_NUMBER: ${{ steps.create_pr.outputs.pr_number }}
+        run: |
+          gh pr merge "$PR_NUMBER" --merge --auto
+
+        # --auto \  programa la PR para que se haga merge al pasar todas las validaciones y politicas
+        # --merge \ fuerza que el merge sea de tipo merge commit, sin rebase ni squash

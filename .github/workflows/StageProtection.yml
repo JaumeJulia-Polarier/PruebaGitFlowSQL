@@ -1,0 +1,22 @@
+name: Validate PR branch name against stage
+
+on:
+  pull_request:
+    branches:
+      - stage
+
+jobs:
+  check-branch-name:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check branch name pattern
+        env:
+          BRANCH_NAME: ${{ github.head_ref }}
+        run: |
+          echo "Checking branch: $BRANCH_NAME"
+          if [[ "$BRANCH_NAME" == "develop" ]] || [[ "$BRANCH_NAME" == "main" ]]; then
+            echo "✅ Branch name is valid"
+          else
+            echo "❌ Branch name '$BRANCH_NAME' is not allowed for PRs to stage. Only automatic PRs from develop are allowed."
+            exit 1
+          fi

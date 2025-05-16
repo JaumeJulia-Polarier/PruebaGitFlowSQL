@@ -1,0 +1,29 @@
+name: Hotfix deployment
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+jobs:
+  propagate-hotfix:
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'hotfix/')
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.DEPLOY_GH_TOKEN }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Create PR from main to stage
+        run: |
+          gh pr create --base stage --head main --title "Propagate hotfix to stage" --body "This PR propagates the hotfix from main to stage." --repo ${{ github.repository }} --label "hotfix_propagation" || echo "PR already exists"
+          echo "Merging PR number $(gh pr list --base stage --head main --json number -q '.[0].number')"
+          gh pr merge $(gh pr list --base stage --head main --json number -q '.[0].number') --repo ${{ github.repository }} --merge --auto || echo "PR already merged or not found"
+      
+      - name: Create PR from main to develop
+        run: |
+          gh pr create --base develop --head main --title "Propagate hotfix to develop" --body "This PR propagates the hotfix from main to develop." --repo ${{ github.repository }} --label "hotfix_propagation" || echo "PR already exists"
+          echo "Merging PR number $(gh pr list --base develop --head main --json number -q '.[0].number')"
+          gh pr merge $(gh pr list --base develop --head main --json number -q '.[0].number') --repo ${{ github.repository }} --merge --auto || echo "PR already merged or not found"

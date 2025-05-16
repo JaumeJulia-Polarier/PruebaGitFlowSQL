@@ -1,0 +1,32 @@
+name: Automatic deployment
+on:
+  # workflow_run:
+  #   workflows: ['CI', 'PR a stage']
+  #   types:
+  #     - completed
+  push:
+    branches:
+      - main
+      - develop
+      - stage
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{github.ref_name}}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: github ref_name
+        run: echo ${{github.ref_name}}
+      
+      - name: github ref_name por si acaso
+        run: echo "${{ github.ref_name }}"
+
+      - name: Log text variable
+        run: echo ${{ vars.TEXT }}
+
+      - name: Log text variable por si acaso
+        run: echo "${{ vars.TEXT }}"

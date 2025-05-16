@@ -1,0 +1,110 @@
+name: Validate PR
+on:
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  check_validations_on_other_repositories:
+    name: Check validations on other repositories
+    if: ${{ github.event.action == 'submitted' && github.event.review.state == 'approved' }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.pull_request.base.ref }}
+
+    outputs:
+      ready_to_merge: ${{ steps.verify.outputs.ready_to_merge }}
+      id_pr: ${{ steps.extract-id.outputs.id_pr }}
+
+    steps:
+      - name: Extract ID from PR
+        id: extract-id
+        run: |
+          title="${{ github.event.pull_request.title }}"
+          ID_PR=$(echo "$title" | grep -oP '(?<=\[)[^]]+')
+          echo "ID_PR=$ID_PR" >> $GITHUB_OUTPUT
+
+      - name: Verify PRs in other repositories
+        id: verify
+        env: 
+          GH_TOKEN: ${{ secrets.DEPLOY_GH_TOKEN }}
+          FRONTEND_REPO: ${{ secrets.FRONTEND_REPO }}
+          BACKEND_REPO: ${{ secrets.BACKEND_REPO }}
+          SQL_REPO: ${{ secrets.SQL_REPO }}
+          CURRENT_REPO: ${{ github.repository }}
+          CURRENT_PR: ${{ github.event.pull_request.number }}
+        run: |
+          check_repo() {
+            repo=$1
+            id=$2
+
+            prs=$(gh pr list -R "$repo" --state open --search "$id in:title" --json number,reviews,mergedAt | jq -c '.[]')
+            if [[ -z "$prs" ]]; then
+              echo "No hay PR abierta con ID $id en $repo. Considerado OK."
+              return 0
+            fi
+
+            ok=false
+            while read -r pr; do
+              aprobado=$(echo "$pr" | jq '[.reviews[] | select(.state=="APPROVED")] | length')
+              mergeado=$(echo "$pr" | jq '.mergedAt')
+              if [[ "$aprobado" -gt 0 && "$mergeado" == "null" ]]; then
+                echo "PR en $repo está aprobada y no mergeada. OK."
+                ok=true
+                break
+                # return 0
+              fi
+            done < <(echo "$prs")
+
+            if [[ "$ok" == true ]]; then
+              return 0
+            else
+              gh pr edit "$CURRENT_PR" --repo "$CURRENT_REPO" --add-label "sync_pending"
+              echo "PR en $repo no está aprobada o ya mergeada. NO OK."
+              return 1
+            fi
+          }
+
+          check_repo "$BACKEND_REPO" "$ID_PR" || exit 1
+          # check_repo "$SQL_REPO" "$ID_PR" || exit 1
+
+          echo "ready_to_merge=true" >> $GITHUB_OUTPUT
+      
+  start_coordinated_merge:
+    name: Start coordinated merge
+    needs: check_validations_on_other_repositories
+    if: ${{ needs.check_validations_on_other_repositories.outputs.ready_to_merge == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mergear en otros repos (A y B)
+        env:
+          GH_TOKEN: ${{ secrets.DEPLOY_GH_TOKEN }}
+          FRONTEND_REPO: ${{ secrets.FRONTEND_REPO }}
+          BACKEND_REPO: ${{ secrets.BACKEND_REPO }}
+          SQL_REPO: ${{ secrets.SQL_REPO }}
+          ID_PR: ${{ needs.check_validations_on_other_repositories.outputs.id_pr }}
+        run: |
+          merge_if_exists() {
+            repo=$1
+            id=$2
+            echo "Repo: $repo"
+            echo "ID: $id"
+            pr_number=$(gh pr list -R "$repo" --state open --search "$id in:title" --json number | jq -r '.[0].number')
+            if [[ "$pr_number" != "null" ]]; then
+              echo "Mergeando PR #$pr_number en $repo"
+              gh pr merge $pr_number -R "$repo" --merge
+              gh pr edit $pr_number --repo "$repo" --remove-label "sync_pending" || echo "La etiqueta no existía o ya fue eliminada."
+            else
+              echo "No se encontró PR con ID $id en $repo"
+            fi
+          }
+
+          merge_if_exists "$BACKEND_REPO" "$ID_PR"
+          # merge_if_exists "$SQL_REPO" "$ID_PR"
+
+      - name: Checkout del repositorio actual
+        uses: actions/checkout@v4
+
+      - name: Mergear en repositorio actual
+        env:
+          GH_TOKEN: ${{ secrets.DEPLOY_GH_TOKEN }}
+        run: |
+          gh pr merge ${{ github.event.pull_request.number }} --merge

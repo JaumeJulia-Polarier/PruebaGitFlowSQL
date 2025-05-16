@@ -1,0 +1,22 @@
+name: Validate PR branch name against develop
+
+on:
+  pull_request:
+    branches:
+      - develop
+
+jobs:
+  check-branch-name:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check branch name pattern
+        env:
+          BRANCH_NAME: ${{ github.head_ref }}
+        run: |
+          echo "Checking branch: $BRANCH_NAME"
+          if [[ "$BRANCH_NAME" =~ ^(hotfix|feature|internal|bug)/.+ ]] || [[ "$BRANCH_NAME" == "main" ]]; then
+            echo "✅ Branch name is valid"
+          else
+            echo "❌ Branch name '$BRANCH_NAME' is not allowed for PRs to develop, make sure it follows the pattern 'hotfix/', 'feature/', 'internal/' or 'bug/' depending on the implementation."
+            exit 1
+          fi

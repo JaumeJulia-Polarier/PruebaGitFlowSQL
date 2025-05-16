@@ -1,0 +1,88 @@
+name: Production Automatic PR
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - stage
+
+jobs:
+  Prepare_PR:
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'develop')
+    runs-on: ubuntu-latest
+    environment: ${{github.ref_name}}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install GitHub CLI
+        run: sudo apt-get install gh -y
+  
+      - name: Install jq
+        run: sudo apt-get install jq -y
+
+      - name: Generate deployment batch ID
+        id: generate_batch_id
+        env:
+          GITHUB_TOKEN: ${{ secrets.DEPLOY_GH_TOKEN }}
+          target_env: MAIN
+        run: |
+          TODAY=$(date +%Y%m%d)
+          PREFIX="PROD_DEPLOY_${TODAY}_"
+
+          # Obtener títulos de las PRs abiertas o cerradas hacia main
+          PR_TITLES=$(gh pr list --base main --state all --limit 100 --json title -q '.[].title')
+
+          # Filtrar títulos que contengan nuestro patrón y extraer el número
+          MAX_NUMBER=$(echo "$PR_TITLES" | grep -o "${PREFIX}[0-9]\{3\}" | sed "s/${PREFIX}//" | sort -nr | head -n 1)
+
+          if [ -z "$MAX_NUMBER" ]; then
+            NEXT_NUMBER="001"
+          else
+            NEXT_NUMBER=$(printf "%03d" $((10#$MAX_NUMBER + 1)))
+          fi
+
+          DEPLOY_ID="${PREFIX}${NEXT_NUMBER}"
+
+          echo "Deploy batch ID: $DEPLOY_ID"
+          echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
+
+      - name: PR to production
+        id: create_pr # Give this step an ID to reference its output
+        env:
+          GITHUB_TOKEN: ${{ secrets.DEPLOY_GH_TOKEN }}
+          DEPLOY_ID: ${{ steps.generate_batch_id.outputs.deploy_id }}
+        run: |
+          PR_OUTPUT=$(gh pr create \
+            --title "Automated PR: stage -> main [$DEPLOY_ID]" \
+            --body "This PR is part of the production deploy batch [$DEPLOY_ID]" \
+            --base main \
+            --head stage \
+            --label "automated-pr" \
+            --label "${{ steps.create_label.outputs.PR_LABEL }}" \
+            ) #\
+            # --reviewer "copilot,Polarier" )
+
+          echo "gh pr create output:"
+          echo "$PR_OUTPUT"
+
+          # Extract the PR number from the standard output URL
+          # The output typically includes a line with the PR URL like "https://github.com/owner/repo/pull/123"
+          # We'll use grep to find the line containing the URL and sed to extract the number.
+          # Ensure the grep pattern is robust enough to find the URL line.
+          PR_URL=$(echo "$PR_OUTPUT" | grep -oP 'https://github.com/[^/]+/[^/]+/pull/\d+' | head -1)
+
+          if [ -z "$PR_URL" ]; then
+            echo "Error: Could not find PR URL in output."
+            # Exit with a non-zero status to fail the step
+            exit 1
+          fi
+
+          # Extract the number from the URL using sed
+          PR_NUMBER=$(echo "$PR_URL" | sed -E 's/.*pull\/([0-9]+).*/\1/')
+
+          echo "Created PR #$PR_NUMBER"
+          # Set the PR number as a step output variable for the next step
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"

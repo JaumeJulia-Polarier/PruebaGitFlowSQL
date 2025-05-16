@@ -1,0 +1,29 @@
+name: PR a stage backup
+
+on:
+  schedule:
+    - cron: '15 9 * * *' # Cada día a la medianoche
+
+jobs:
+    prepare-stage:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v2
+
+            - name: Preventive Unit testing
+              run: |
+                echo "Running preventive unit tests..."
+            
+            - name: PR to stage
+              uses: peter-evans/create-pull-request@v6
+              with:
+                token: ${{ secrets.GITHUB_TOKEN }}
+                title: 'PR to stage'
+                body: 'This is an automated PR to stage.'
+                base: stage
+                branch: develop # La rama de la que se hace el PR
+                # head: 'develop' # No es necesario, ya que por defecto es la rama de la que se hace el PR. Es lo mismo que 'branch'
+                commit-message: 'Automated PR to stage'
+                delete-branch: false
+                # labels: 'automated-pr'
