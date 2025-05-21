@@ -13,6 +13,10 @@ jobs:
         uses: actions/checkout@v3
         with:
           ref: develop
+          fetch-depth: 0 # Fetch all history for all branches and tags
+
+      - name: Fetch stage branch
+        run: git fetch origin stage
 
       - name: Preventive Unit testing
         run: |
@@ -31,9 +35,24 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.DEPLOY_GH_TOKEN }}
         #   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Obtain task ids from commits
+          TASK_IDS=$(git log origin/stage..HEAD --pretty=format:"- %s%n%b" --merges | grep -oE '\[#([a-zA-Z0-9\-]+)\]' | sort -u)
+
+          # Add a fallback message if no task IDs are detected
+          if [ -z "$TASK_IDS" ]; then
+            TASK_IDS="No task IDs found in the commits."
+          fi
+
+          pr_body=$(cat <<EOF
+          This PR includes the following tasks:
+              
+          $TASK_IDS
+          EOF
+          )
+
           PR_OUTPUT=$(gh pr create \
             --title "Automated PR: develop -> stage" \
-            --body "This is an automated PR to stage." \
+            --body "$pr_body" \
             --base stage \
             --head develop \
             --label "automated-pr")
