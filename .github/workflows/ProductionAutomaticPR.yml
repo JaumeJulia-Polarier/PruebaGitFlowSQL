@@ -15,6 +15,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+        with:
+          ref: stage
+          fetch-depth: 0 # Fetch all history for all branches and tags
+      
+      - name: Fetch main branch
+        run: git fetch origin main
 
       - name: Install GitHub CLI
         run: sudo apt-get install gh -y
@@ -54,9 +60,24 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.DEPLOY_GH_TOKEN }}
           DEPLOY_ID: ${{ steps.generate_batch_id.outputs.deploy_id }}
         run: |
+          # Obtain task ids from commits
+          TASK_IDS=$(git log origin/main..HEAD --pretty=format:"- %s%n%b" --merges | grep -oE '\[#([a-zA-Z0-9\-]+)\]' | sort -u)
+
+          # Add a fallback message if no task IDs are detected
+          if [ -z "$TASK_IDS" ]; then
+            TASK_IDS="No specific tasks detected for this deployment."
+          fi
+
+          pr_body=$(cat <<EOF
+          This PR is part of the production deploy batch [$DEPLOY_ID] which includes the following tasks:
+
+          $TASK_IDS
+          EOF
+          )
+
           PR_OUTPUT=$(gh pr create \
             --title "Automated PR: stage -> main [$DEPLOY_ID]" \
-            --body "This PR is part of the production deploy batch [$DEPLOY_ID]" \
+            --body "$pr_body" \
             --base main \
             --head stage \
             --label "automated-pr" \
