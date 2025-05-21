@@ -34,7 +34,7 @@ jobs:
       - name: Flyway - CLI Install
         if: env.FLYWAY_CLI_INSTALL_CHECK == 'true'
         run: |
-          $scriptPath = "${{ GITHUB.WORKSPACE }}/scripts/Flyway_DownloadAndInstallCLI_Unix.sh"
+          $scriptPath = "${{ GITHUB.WORKSPACE }}/Scripts/Flyway_DownloadAndInstallCLI_Unix.sh"
           if (Test-Path $scriptPath) {
             echo "Script found. Running Flyway_DownloadAndInstallCLI_Unix.sh..."
             & $scriptPath
