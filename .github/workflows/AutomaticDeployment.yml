@@ -14,19 +14,37 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: ${{github.ref_name}}
+    env:
+      FLYWAY_AUTH_DISABLED: ${{ vars.FLYWAY_AUTH_DISABLED }}
+      FLYWAY_EMAIL: ${{ secrets.FLYWAY_EMAIL }} 
+      FLYWAY_TOKEN: ${{ secrets.FLYWAY_TOKEN }}
+      TARGET_DATABASE_USERNAME: ${{ secrets.TARGET_DATABASE_USERNAME }}
+      TARGET_DATABASE_PASSWORD: ${{ secrets.TARGET_DATABASE_PASSWORD }}
+      ENVIRONMENT: ${{ secrets.ENVIRONMENT_DDBB }} 
+      CUSTOM_PARAMS: ${{ vars.CUSTOM_PARAMS }}
+      FLYWAY_PUBLISH_RESULT: ${{ vars.FLYWAY_PUBLISH_RESULT }}
+      FLYWAY_INSTALL_DIRECTORY: ${{ secrets.FLYWAY_INSTALL_DIRECTORY }}
+      FLYWAY_CLI_INSTALL_CHECK: ${{ vars.FLYWAY_CLI_INSTALL_CHECK }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: github ref_name
-        run: echo ${{github.ref_name}}
-      
-      - name: github ref_name por si acaso
-        run: echo "${{ github.ref_name }}"
+      # Step 1 - Flyway CLI Install #
+      - name: Flyway - CLI Automatic Validation and Install
+        run: bash ${{ GITHUB.WORKSPACE }}/Scripts/Flyway_DownloadAndInstallCLI_Unix.sh
+        if: env.FLYWAY_CLI_INSTALL_CHECK == 'true'
 
-      - name: Log text variable
+      # Step 2 - Flyway License Authentication #
+      - name: Flyway Authentication
+        if: ${{ success() && env.FLYWAY_AUTH_DISABLED != 'true' }}
+        run: |
+         flyway auth -IAgreeToTheEula -email="${{ env.FLYWAY_EMAIL }}" -token="${{ env.FLYWAY_TOKEN }}"
+
+      - name: Migrate Test DB
+        if: success()
+        run: |
+          flyway info migrate info -environment="${{ env.ENVIRONMENT }}" -user="${{ env.TARGET_DATABASE_USERNAME }}" -password="${{ env.TARGET_DATABASE_PASSWORD }}" -baselineOnMigrate="true" -configFiles="${{ GITHUB.WORKSPACE }}/flyway.toml" -locations="filesystem:${{ GITHUB.WORKSPACE }}/migrations" "-publishResult=${{ env.FLYWAY_PUBLISH_RESULT }}" "-flywayServicePublish.publishReport=${{ env.FLYWAY_PUBLISH_RESULT }}" "-reportEnabled=${{ env.FLYWAY_PUBLISH_RESULT }}" ${{ env.CUSTOM_PARAMS }}
+
+      - name: Entorno al que apunta
         run: echo ${{ vars.TEXT }}
-
-      - name: Log text variable por si acaso
-        run: echo "${{ vars.TEXT }}"

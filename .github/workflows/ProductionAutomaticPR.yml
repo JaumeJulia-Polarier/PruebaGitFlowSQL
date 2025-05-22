@@ -82,8 +82,8 @@ jobs:
             --head stage \
             --label "automated-pr" \
             --label "${{ steps.create_label.outputs.PR_LABEL }}" \
-            ) #\
-            # --reviewer "copilot,Polarier" )
+            --reviewer "${{ secrets.REQUIRED_REVIEWERS }}" \
+            )
 
           echo "gh pr create output:"
           echo "$PR_OUTPUT"
